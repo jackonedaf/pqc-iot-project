@@ -1,0 +1,25 @@
+title: MQTT + PQC
+views:
+  - title: Laboratorium
+    path: lab
+    cards:
+      - type: markdown
+        content: |
+          # Bezpieczna komunikacja IoT
+          Symulator → MQTT/TLS → brama PQC → zweryfikowane dane → Home Assistant.
+          Algorytmy: ML-KEM-768, HQC-128, X25519. Klucz sesji: HKDF-SHA256; dane: AES-256-GCM.
+      - type: entities
+        title: Odczyty i kryptografia
+        entities:
+          - sensor.pqc_temperature
+          - sensor.pqc_humidity
+          - sensor.pqc_algorithm
+          - sensor.pqc_payload_bytes
+          - sensor.pqc_clock_latency_ms
+          - sensor.pqc_rejected_packets
+      - type: history-graph
+        title: Telemetria
+        hours_to_show: 1
+        entities:
+          - sensor.pqc_temperature
+          - sensor.pqc_humidity

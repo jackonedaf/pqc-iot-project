@@ -1,0 +1,25 @@
+user gateway
+topic read pqc/v1/sensor-01/up
+topic write pqc/v1/sensor-01/down
+topic read homeassistant/status
+topic write homeassistant/sensor/pqc_sensor_01/+/config
+topic write lab/verified/sensor-01/#
+topic write lab/gateway/status
+
+user sensor-01
+topic write pqc/v1/sensor-01/up
+topic read pqc/v1/sensor-01/down
+
+user homeassistant
+topic read homeassistant/#
+topic write homeassistant/status
+topic read lab/verified/#
+topic read lab/gateway/status
+
+user healthcheck
+topic write healthcheck
+
+# Lab adversary may inject on the encrypted transport, but cannot publish verified states.
+# It does not receive the device authentication PSK or gateway credentials.
+user attacker
+topic readwrite pqc/v1/sensor-01/#

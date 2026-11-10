@@ -1,0 +1,151 @@
+name: pqc-iot
+
+x-app: &app
+  build: .
+  image: pqc-iot-lab:local
+  init: true
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  read_only: true
+  tmpfs: [/tmp]
+
+x-mqtt-env: &mqtt-env
+  MQTT_HOST: mosquitto
+  MQTT_PORT: "8883"
+  MQTT_CA: /certs/ca.crt
+  TZ: ${TZ:-Europe/Warsaw}
+
+services:
+  # One-shot provisioning: random credentials, device PSK, private CA and broker certificate.
+  provision:
+    <<: *app
+    user: "0:0"
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    read_only: false
+    command: [python, -m, pqc_iot.provision, --root, /runtime]
+    volumes:
+      - ./runtime:/runtime
+    restart: "no"
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0.22
+    restart: unless-stopped
+    environment:
+      XDG_CONFIG_HOME: /mosquitto/security
+    depends_on:
+      provision:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${MQTT_TLS_PORT:-8883}:8883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro
+      - ./runtime/broker:/mosquitto/security:ro
+      - mosquitto-data:/mosquitto/data
+    healthcheck:
+      test: [CMD, mosquitto_pub, -h, localhost, -p, "8883", --cafile, /mosquitto/security/ca.crt, -t, healthcheck, -m, ok]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  gateway:
+    <<: *app
+    restart: unless-stopped
+    command: [python, -m, pqc_iot.gateway]
+    environment:
+      <<: *mqtt-env
+      MQTT_CREDENTIALS: /identity/mqtt.json
+      AUTH_KEY_FILE: /identity/auth.key
+      RESULTS_DIR: /results
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    volumes:
+      - ./runtime/gateway:/identity:ro
+      - ./runtime/public:/certs:ro
+      - ./results:/results
+    healthcheck:
+      test: [CMD, python, -m, pqc_iot.healthcheck, gateway]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  sensor:
+    <<: *app
+    restart: unless-stopped
+    command: [python, -m, pqc_iot.device]
+    environment:
+      <<: *mqtt-env
+      MQTT_CREDENTIALS: /identity/mqtt.json
+      AUTH_KEY_FILE: /identity/auth.key
+      ALGORITHM: ${ALGORITHM:-ml-kem-768}
+      PUBLISH_INTERVAL: ${PUBLISH_INTERVAL:-5}
+      RESULTS_DIR: /results
+    depends_on:
+      gateway:
+        condition: service_healthy
+    volumes:
+      - ./runtime/device:/identity:ro
+      - ./runtime/public:/certs:ro
+      - ./results:/results
+    healthcheck:
+      test: [CMD, python, -m, pqc_iot.healthcheck, sensor]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  homeassistant:
+    image: ${HOMEASSISTANT_IMAGE:-ghcr.io/home-assistant/home-assistant:2026.11.0}
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      TZ: ${TZ:-Europe/Warsaw}
+    ports:
+      - "127.0.0.1:${HA_PORT:-8123}:8123"
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    volumes:
+      - homeassistant-data:/config
+      - ./homeassistant/configuration.yaml:/config/configuration.yaml:ro
+      - ./homeassistant/dashboard.yaml:/config/pqc-dashboard.yaml:ro
+      - ./runtime/public:/config/certs:ro
+
+  benchmark:
+    <<: *app
+    profiles: [tools]
+    command: [python, -m, pqc_iot.benchmark, --iterations, "100", --output, /results/crypto.csv]
+    volumes:
+      - ./results:/results
+
+  report:
+    <<: *app
+    profiles: [tools]
+    command: [python, -m, pqc_iot.report, --results, /results]
+    environment:
+      MPLCONFIGDIR: /tmp/matplotlib
+    volumes:
+      - ./results:/results
+
+  attacks:
+    <<: *app
+    profiles: [tools]
+    command: [python, -m, pqc_iot.attacks]
+    environment:
+      <<: *mqtt-env
+      MQTT_CREDENTIALS: /identity/mqtt.json
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    volumes:
+      - ./runtime/attacker:/identity:ro
+      - ./runtime/public:/certs:ro
+
+  tests:
+    <<: *app
+    profiles: [test]
+    command: [python, -m, pytest, -q, -p, no:cacheprovider]
+
+volumes:
+  mosquitto-data:
+  homeassistant-data:

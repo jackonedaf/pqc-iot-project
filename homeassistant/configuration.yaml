@@ -1,0 +1,14 @@
+default_config:
+
+homeassistant:
+  name: Laboratorium MQTT + PQC
+  time_zone: Europe/Warsaw
+
+lovelace:
+  dashboards:
+    pqc-lab:
+      mode: yaml
+      title: MQTT + PQC
+      icon: mdi:shield-lock
+      show_in_sidebar: true
+      filename: pqc-dashboard.yaml

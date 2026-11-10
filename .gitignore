@@ -1,0 +1,11 @@
+.venv/
+.work/
+.docker-local/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.env
+runtime/
+results/*
+!results/.gitkeep

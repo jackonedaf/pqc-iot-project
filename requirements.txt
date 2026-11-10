@@ -1,0 +1,4 @@
+pqcrypto==0.3.4
+cryptography==46.0.3
+paho-mqtt==2.1.0
+psutil==7.1.3

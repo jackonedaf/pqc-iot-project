@@ -1,0 +1,31 @@
+name: Validate laboratory
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: pytest -q
+      - run: docker compose config --quiet
+      - run: docker compose up -d --build --wait --wait-timeout 240 mosquitto gateway sensor
+      - name: Real MQTT smoke tests for all algorithms
+        run: |
+          docker compose stop sensor
+          for algorithm in ml-kem-768 hqc-128 x25519; do
+            sleep 2
+            docker compose run --rm --no-deps sensor python -m pqc_iot.device --algorithm "$algorithm" --count 3 --interval 1
+          done
+          docker compose --profile tools run --rm --no-deps attacks python -m pqc_iot.check_acl
+          docker compose up -d --no-deps sensor
+          docker compose --profile tools run --rm --no-deps attacks python -m pqc_iot.attacks --mode replay
+          docker compose --profile tools run --rm --no-deps attacks python -m pqc_iot.attacks --mode tamper
+      - if: always()
+        run: docker compose logs --no-color
+      - if: always()
+        run: docker compose down
