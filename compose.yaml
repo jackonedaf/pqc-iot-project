@@ -22,6 +22,8 @@ services:
     user: "0:0"
     cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
     read_only: false
+    environment:
+      RUNTIME_GID: ${RUNTIME_GID:-1000}
     command: [python, -m, pqc_iot.provision, --root, /runtime]
     volumes:
       - ./runtime:/runtime:z

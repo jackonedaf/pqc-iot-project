@@ -37,6 +37,9 @@ Usługa `provision` kończy pracę kodem 0 po utworzeniu losowych haseł MQTT, 3
 uwierzytelnienia urządzenia, prywatnego CA i certyfikatu brokera. Kolejne uruchomienia zachowują tożsamości.
 Sekrety trafiają do ignorowanego przez Git `runtime/`; nie publikuj tego katalogu.
 Niekompletne przygotowanie kończy się błędem zamiast cichego zastąpienia kluczy.
+Pliki są czytelne dla grupy wskazanej przez `RUNTIME_GID` (domyślnie `1000`), aby można
+było korzystać z nich z hosta. Na Linuksie ustaw w `.env` wynik `id -g`, jeśli Twoja
+podstawowa grupa ma inny GID.
 
 - Home Assistant: **http://localhost:8123**.
 - Broker: **localhost:8883**, wyłącznie TLS, uwierzytelnianie i ACL; CA: `runtime/public/ca.crt`.

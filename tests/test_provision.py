@@ -35,6 +35,19 @@ def test_compose_precreated_empty_mount_directories(tmp_path):
     assert (root / "manifest.json").exists()
 
 
+def test_existing_provisioning_restores_group_read_access(tmp_path):
+    root = tmp_path / "runtime"
+    provision(root)
+    secret = root / "gateway/mqtt.json"
+    secret.chmod(0o600)
+    (root / "gateway").chmod(0o700)
+
+    provision(root)
+
+    assert secret.stat().st_mode & 0o040
+    assert (root / "gateway").stat().st_mode & 0o050 == 0o050
+
+
 def test_partial_secrets_are_never_silently_overwritten(tmp_path):
     root = tmp_path / "runtime"
     (root / "device").mkdir(parents=True)

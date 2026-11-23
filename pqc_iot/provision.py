@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import stat
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -16,12 +17,16 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 
-def write(path, data, mode=0o600, uid=10001):
+def runtime_gid():
+    return int(os.environ.get("RUNTIME_GID", "1000"))
+
+
+def write(path, data, mode=0o640, uid=10001):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data if isinstance(data, bytes) else data.encode())
     path.chmod(mode)
     if os.name == "posix" and os.geteuid() == 0:
-        os.chown(path, uid, uid)
+        os.chown(path, uid, runtime_gid())
 
 
 def password_hash(password):
@@ -35,7 +40,20 @@ def prepare_results(root):
     results = root.parent / "results"
     results.mkdir(exist_ok=True)
     if os.name == "posix" and os.geteuid() == 0:
-        os.chown(results, 10001, 10001)
+        os.chown(results, 10001, runtime_gid())
+    results.chmod(0o770)
+
+
+def prepare_runtime_access(root):
+    gid = runtime_gid()
+    for path in root.rglob("*"):
+        permissions = stat.S_IMODE(path.stat().st_mode)
+        if path.is_dir():
+            path.chmod(permissions | 0o050)
+        elif path.is_file():
+            path.chmod(permissions | 0o040)
+        if os.name == "posix" and os.geteuid() == 0:
+            os.chown(path, -1, gid)
 
 
 def provision(root):
@@ -45,6 +63,7 @@ def provision(root):
         for relative in json.loads(manifest.read_text())["files"]:
             if not (root / relative).is_file():
                 raise RuntimeError(f"Incomplete provisioning: missing {relative}; restore runtime backup")
+        prepare_runtime_access(root)
         prepare_results(root)
         print("Provisioning already complete; existing identities preserved.")
         return
@@ -55,10 +74,10 @@ def provision(root):
     for name in ("gateway", "device", "homeassistant", "attacker", "broker", "public", "ca"):
         folder = root / name
         folder.mkdir(exist_ok=True)
-        folder.chmod(0o755 if name in ("broker", "public") else 0o700)
+        folder.chmod(0o755 if name == "public" else 0o750)
         if os.name == "posix" and os.geteuid() == 0:
             owner = 1883 if name == "broker" else 10001
-            os.chown(folder, owner, owner)
+            os.chown(folder, owner, runtime_gid())
     psk = secrets.token_bytes(32)
     for name in ("gateway", "device"):
         write(root / name / "auth.key", psk)
