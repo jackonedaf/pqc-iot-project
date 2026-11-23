@@ -31,6 +31,13 @@ def password_hash(password):
     return f"$7${iterations}${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}"
 
 
+def prepare_results(root):
+    results = root.parent / "results"
+    results.mkdir(exist_ok=True)
+    if os.name == "posix" and os.geteuid() == 0:
+        os.chown(results, 10001, 10001)
+
+
 def provision(root):
     root = Path(root)
     manifest = root / "manifest.json"
@@ -38,6 +45,7 @@ def provision(root):
         for relative in json.loads(manifest.read_text())["files"]:
             if not (root / relative).is_file():
                 raise RuntimeError(f"Incomplete provisioning: missing {relative}; restore runtime backup")
+        prepare_results(root)
         print("Provisioning already complete; existing identities preserved.")
         return
     # Compose can create empty bind-mount directories before the init service starts.
@@ -99,10 +107,7 @@ def provision(root):
     write(root / "broker/server.crt", cert.public_bytes(serialization.Encoding.PEM), 0o644, 1883)
     files = sorted(str(p.relative_to(root)).replace("\\", "/") for p in root.rglob("*") if p.is_file())
     write(manifest, json.dumps({"version": 1, "files": files}, indent=2))
-    results = root.parent / "results"
-    results.mkdir(exist_ok=True)
-    if os.name == "posix" and os.geteuid() == 0:
-        os.chown(results, 10001, 10001)
+    prepare_results(root)
     print("Provisioned TLS, MQTT accounts and device PSK. Secrets are in runtime/ (gitignored).")
 
 
